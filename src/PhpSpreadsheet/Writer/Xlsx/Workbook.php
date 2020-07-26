@@ -2,14 +2,11 @@
 
 namespace PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
-use PhpOffice\PhpSpreadsheet\Calculation\Calculation;
-use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
-use PhpOffice\PhpSpreadsheet\NamedRange;
 use PhpOffice\PhpSpreadsheet\Shared\Date;
 use PhpOffice\PhpSpreadsheet\Shared\XMLWriter;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\Writer\Exception as WriterException;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx\DefinedNames as DefinedNamesWriter;
 
 class Workbook extends WriterPart
 {
@@ -56,7 +53,7 @@ class Workbook extends WriterPart
         $this->writeSheets($objWriter, $spreadsheet);
 
         // definedNames
-        $this->writeDefinedNames($objWriter, $spreadsheet);
+        (new DefinedNamesWriter($objWriter, $spreadsheet))->write();
 
         // calcPr
         $this->writeCalcPr($objWriter, $recalcRequired);
@@ -223,204 +220,6 @@ class Workbook extends WriterPart
             $objWriter->endElement();
         } else {
             throw new WriterException('Invalid parameters passed.');
-        }
-    }
-
-    /**
-     * Write Defined Names.
-     *
-     * @param XMLWriter $objWriter XML Writer
-     */
-    private function writeDefinedNames(XMLWriter $objWriter, Spreadsheet $spreadsheet): void
-    {
-        // Write defined names
-        $objWriter->startElement('definedNames');
-
-        // Named ranges
-        if (count($spreadsheet->getDefinedNames()) > 0) {
-            // Named ranges
-            $this->writeNamedRanges($objWriter, $spreadsheet);
-        }
-
-        // Other defined names
-        $sheetCount = $spreadsheet->getSheetCount();
-        for ($i = 0; $i < $sheetCount; ++$i) {
-            // definedName for autoFilter
-            $this->writeDefinedNameForAutofilter($objWriter, $spreadsheet->getSheet($i), $i);
-
-            // definedName for Print_Titles
-            $this->writeDefinedNameForPrintTitles($objWriter, $spreadsheet->getSheet($i), $i);
-
-            // definedName for Print_Area
-            $this->writeDefinedNameForPrintArea($objWriter, $spreadsheet->getSheet($i), $i);
-        }
-
-        $objWriter->endElement();
-    }
-
-    /**
-     * Write named ranges.
-     *
-     * @param XMLWriter $objWriter XML Writer
-     */
-    private function writeNamedRanges(XMLWriter $objWriter, Spreadsheet $spreadsheet): void
-    {
-        // Loop named ranges
-        $namedRanges = $spreadsheet->getDefinedNames();
-        foreach ($namedRanges as $namedRange) {
-            $this->writeDefinedNameForNamedRange($objWriter, $namedRange);
-        }
-    }
-
-    /**
-     * Write Defined Name for named range.
-     *
-     * @param XMLWriter $objWriter XML Writer
-     */
-    private function writeDefinedNameForNamedRange(XMLWriter $objWriter, NamedRange $pNamedRange): void
-    {
-        echo "WRITING DEFINED NAME: {$pNamedRange->getName()}, VALUE: {$pNamedRange->getValue()}", PHP_EOL, PHP_EOL;
-
-        // definedName for named range
-        $objWriter->startElement('definedName');
-        $objWriter->writeAttribute('name', $pNamedRange->getName());
-        if ($pNamedRange->getLocalOnly()) {
-            $objWriter->writeAttribute('localSheetId', $pNamedRange->getScope()->getParent()->getIndex($pNamedRange->getScope()));
-        }
-
-        $definedRange = $pNamedRange->getValue();
-        $splitCount = preg_match(
-            '/' . Calculation::CALCULATION_REGEXP_CELLREF . '/mui',
-            $definedRange,
-            $splitRanges,
-            PREG_OFFSET_CAPTURE
-        );
-        var_dump($splitCount, $splitRanges[0] ?? null);
-
-        while ($splitCount > 0) {
-            --$splitCount;
-            $range = $splitRanges[$splitCount][0];
-            echo "OLD VALUE: {$range}", PHP_EOL;
-            // Create absolute coordinate and write as raw text
-            $newRange = Coordinate::splitRange($range);
-            $iMax = count($newRange);
-            for ($i = 0; $i < $iMax; ++$i) {
-                $newRange[$i][0] = '\'' . str_replace("'", "''", $pNamedRange->getWorksheet()->getTitle()) . '\'!' . Coordinate::absoluteReference($newRange[$i][0]);
-                if (isset($newRange[$i][1])) {
-                    $newRange[$i][1] = Coordinate::absoluteReference($newRange[$i][1]);
-                }
-            }
-            $newRange = Coordinate::buildRange($newRange);
-            echo "NEW VALUE: {$newRange}", PHP_EOL;
-            $definedRange = substr($definedRange, 0, $splitRanges[$splitCount][1]) . $newRange . substr($definedRange, $splitRanges[0][1] + strlen($range));
-        }
-
-        echo "WRITING NEW VALUE: {$definedRange}", PHP_EOL;
-        $objWriter->writeRawData($definedRange);
-
-        $objWriter->endElement();
-    }
-
-    /**
-     * Write Defined Name for autoFilter.
-     *
-     * @param XMLWriter $objWriter XML Writer
-     * @param int $pSheetId
-     */
-    private function writeDefinedNameForAutofilter(XMLWriter $objWriter, Worksheet $pSheet, $pSheetId = 0): void
-    {
-        // definedName for autoFilter
-        $autoFilterRange = $pSheet->getAutoFilter()->getRange();
-        if (!empty($autoFilterRange)) {
-            $objWriter->startElement('definedName');
-            $objWriter->writeAttribute('name', '_xlnm._FilterDatabase');
-            $objWriter->writeAttribute('localSheetId', $pSheetId);
-            $objWriter->writeAttribute('hidden', '1');
-
-            // Create absolute coordinate and write as raw text
-            $range = Coordinate::splitRange($autoFilterRange);
-            $range = $range[0];
-            //    Strip any worksheet ref so we can make the cell ref absolute
-            [$ws, $range[0]] = Worksheet::extractSheetTitle($range[0], true);
-
-            $range[0] = Coordinate::absoluteCoordinate($range[0]);
-            $range[1] = Coordinate::absoluteCoordinate($range[1]);
-            $range = implode(':', $range);
-
-            $objWriter->writeRawData('\'' . str_replace("'", "''", $pSheet->getTitle()) . '\'!' . $range);
-
-            $objWriter->endElement();
-        }
-    }
-
-    /**
-     * Write Defined Name for PrintTitles.
-     *
-     * @param XMLWriter $objWriter XML Writer
-     * @param int $pSheetId
-     */
-    private function writeDefinedNameForPrintTitles(XMLWriter $objWriter, Worksheet $pSheet, $pSheetId = 0): void
-    {
-        // definedName for PrintTitles
-        if ($pSheet->getPageSetup()->isColumnsToRepeatAtLeftSet() || $pSheet->getPageSetup()->isRowsToRepeatAtTopSet()) {
-            $objWriter->startElement('definedName');
-            $objWriter->writeAttribute('name', '_xlnm.Print_Titles');
-            $objWriter->writeAttribute('localSheetId', $pSheetId);
-
-            // Setting string
-            $settingString = '';
-
-            // Columns to repeat
-            if ($pSheet->getPageSetup()->isColumnsToRepeatAtLeftSet()) {
-                $repeat = $pSheet->getPageSetup()->getColumnsToRepeatAtLeft();
-
-                $settingString .= '\'' . str_replace("'", "''", $pSheet->getTitle()) . '\'!$' . $repeat[0] . ':$' . $repeat[1];
-            }
-
-            // Rows to repeat
-            if ($pSheet->getPageSetup()->isRowsToRepeatAtTopSet()) {
-                if ($pSheet->getPageSetup()->isColumnsToRepeatAtLeftSet()) {
-                    $settingString .= ',';
-                }
-
-                $repeat = $pSheet->getPageSetup()->getRowsToRepeatAtTop();
-
-                $settingString .= '\'' . str_replace("'", "''", $pSheet->getTitle()) . '\'!$' . $repeat[0] . ':$' . $repeat[1];
-            }
-
-            $objWriter->writeRawData($settingString);
-
-            $objWriter->endElement();
-        }
-    }
-
-    /**
-     * Write Defined Name for PrintTitles.
-     *
-     * @param XMLWriter $objWriter XML Writer
-     * @param int $pSheetId
-     */
-    private function writeDefinedNameForPrintArea(XMLWriter $objWriter, Worksheet $pSheet, $pSheetId = 0): void
-    {
-        // definedName for PrintArea
-        if ($pSheet->getPageSetup()->isPrintAreaSet()) {
-            $objWriter->startElement('definedName');
-            $objWriter->writeAttribute('name', '_xlnm.Print_Area');
-            $objWriter->writeAttribute('localSheetId', $pSheetId);
-
-            // Print area
-            $printArea = Coordinate::splitRange($pSheet->getPageSetup()->getPrintArea());
-
-            $chunks = [];
-            foreach ($printArea as $printAreaRect) {
-                $printAreaRect[0] = Coordinate::absoluteReference($printAreaRect[0]);
-                $printAreaRect[1] = Coordinate::absoluteReference($printAreaRect[1]);
-                $chunks[] = '\'' . str_replace("'", "''", $pSheet->getTitle()) . '\'!' . implode(':', $printAreaRect);
-            }
-
-            $objWriter->writeRawData(implode(',', $chunks));
-
-            $objWriter->endElement();
         }
     }
 }

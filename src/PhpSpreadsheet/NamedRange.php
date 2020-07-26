@@ -2,66 +2,54 @@
 
 namespace PhpOffice\PhpSpreadsheet;
 
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 class NamedRange extends DefinedName
 {
     /**
      * Create a new Named Range.
-     *
-     * @param string $name
-     * @param Worksheet $worksheet
-     * @param string $range
-     * @param bool $localOnly
-     * @param null|Worksheet $scope Scope. Only applies when $pLocalOnly = true. Null for global scope.
      */
-    public function __construct($name, ?Worksheet $worksheet = null, $range = 'A1', $localOnly = false, $scope = null)
-    {
-        echo "SETTING NAMED RANGE {$name} WITH VALUE {$range}", PHP_EOL;
-        // Validate data
-        if (($name === null) || ($range === null)) {
-            throw new Exception('Name or Range Parameters cannot be null.');
+    public function __construct(
+        string $name,
+        ?Worksheet $worksheet = null,
+        string $range = 'A1',
+        bool $localOnly = false,
+        ?Worksheet $scope = null
+    ) {
+        if ($worksheet === null && $scope === null) {
+            throw new Exception('You must specify a worksheet or a scope for a Named Range');
         }
-
         parent::__construct($name, $worksheet, $range, $localOnly, $scope);
     }
 
     /**
-     * Get range.
-     *
-     * @return string
+     * Get the range value.
      */
-    public function getRange()
+    public function getRange(): string
     {
         return $this->value;
     }
 
     /**
-     * Set range.
-     *
-     * @param string $range
-     *
-     * @return $this
+     * Set the range value.
      */
-    public function setRange($range)
+    public function setRange(string $range): self
     {
-        if ($range !== null) {
+        if (!empty($range)) {
             $this->value = $range;
         }
 
         return $this;
     }
 
-    /**
-     * Resolve a named range to a regular cell range.
-     *
-     * @param string $pNamedRange Named range
-     * @param null|Worksheet $pSheet Scope. Use null for global scope
-     *
-     * @return NamedRange
-     */
-    public static function resolveRange($pNamedRange, Worksheet $pSheet)
+    public function getCellsInRange(): array
     {
-        return $pSheet->getParent()->getNamedRange($pNamedRange, $pSheet);
+        $range = $this->value;
+        if (substr($range, 0, 1) === '=') {
+            $range = substr($range, 1);
+        }
+
+        return Coordinate::extractAllCellReferencesInRange($range);
     }
 }

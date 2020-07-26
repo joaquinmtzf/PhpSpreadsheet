@@ -3,6 +3,7 @@
 namespace PhpOffice\PhpSpreadsheetTests;
 
 use PhpOffice\PhpSpreadsheet\DefinedName;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PHPUnit\Framework\TestCase;
 
 class DefinedNameFormulaTest extends TestCase
@@ -16,11 +17,134 @@ class DefinedNameFormulaTest extends TestCase
         self::assertSame($expectedResult, $actualResult);
     }
 
-    public function providerRangeOrFormula()
+    public function testAddDefinedNames(): void
+    {
+        $spreadSheet = new Spreadsheet();
+        $workSheet = $spreadSheet->getActiveSheet();
+
+        $definedNamesForTest = $this->providerRangeOrFormula();
+        foreach ($definedNamesForTest as $key => $definedNameData) {
+            [$value] = $definedNameData;
+            $name = str_replace([' ', '-'], '_', $key);
+            $spreadSheet->addDefinedName(DefinedName::createInstance($name, $workSheet, $value));
+        }
+
+        $allDefinedNames = $spreadSheet->getDefinedNames();
+        self::assertSame(count($definedNamesForTest), count($allDefinedNames));
+    }
+
+    public function testGetNamedRanges(): void
+    {
+        $spreadSheet = new Spreadsheet();
+        $workSheet = $spreadSheet->getActiveSheet();
+
+        $rangeOrFormula = [];
+        $definedNamesForTest = $this->providerRangeOrFormula();
+        foreach ($definedNamesForTest as $key => $definedNameData) {
+            [$value, $isFormula] = $definedNameData;
+            $rangeOrFormula[] = !$isFormula;
+            $name = str_replace([' ', '-'], '_', $key);
+            $spreadSheet->addDefinedName(DefinedName::createInstance($name, $workSheet, $value));
+        }
+
+        $allNamedRanges = $spreadSheet->getNamedRanges();
+        self::assertSame(count(array_filter($rangeOrFormula)), count($allNamedRanges));
+    }
+
+    public function testGetScopedNamedRange(): void
+    {
+        $rangeName = 'NAMED_RANGE';
+        $globalRangeValue = 'A1';
+        $localRangeValue = 'A2';
+
+        $spreadSheet = new Spreadsheet();
+        $workSheet = $spreadSheet->getActiveSheet();
+
+        $spreadSheet->addDefinedName(DefinedName::createInstance($rangeName, $workSheet, $globalRangeValue));
+        $spreadSheet->addDefinedName(DefinedName::createInstance($rangeName, $workSheet, $localRangeValue, true));
+
+        $localScopedRange = $spreadSheet->getNamedRange($rangeName, $workSheet);
+        self::assertSame($localRangeValue, $localScopedRange->getValue());
+    }
+
+    public function testGetGlobalNamedRange(): void
+    {
+        $rangeName = 'NAMED_RANGE';
+        $globalRangeValue = 'A1';
+        $localRangeValue = 'A2';
+
+        $spreadSheet = new Spreadsheet();
+        $workSheet1 = $spreadSheet->getActiveSheet();
+        $spreadSheet->createSheet(1);
+        $workSheet2 = $spreadSheet->getSheet(1);
+
+        $spreadSheet->addDefinedName(DefinedName::createInstance($rangeName, $workSheet1, $globalRangeValue));
+        $spreadSheet->addDefinedName(DefinedName::createInstance($rangeName, $workSheet1, $localRangeValue, true));
+
+        $localScopedRange = $spreadSheet->getNamedRange($rangeName, $workSheet2);
+        self::assertSame($globalRangeValue, $localScopedRange->getValue());
+    }
+
+    public function testGetNamedFormulae(): void
+    {
+        $spreadSheet = new Spreadsheet();
+        $workSheet = $spreadSheet->getActiveSheet();
+
+        $rangeOrFormula = [];
+        $definedNamesForTest = $this->providerRangeOrFormula();
+        foreach ($definedNamesForTest as $key => $definedNameData) {
+            [$value, $isFormula] = $definedNameData;
+            $rangeOrFormula[] = $isFormula;
+            $name = str_replace([' ', '-'], '_', $key);
+            $spreadSheet->addDefinedName(DefinedName::createInstance($name, $workSheet, $value));
+        }
+
+        $allNamedFormulae = $spreadSheet->getNamedFormulae();
+        self::assertSame(count(array_filter($rangeOrFormula)), count($allNamedFormulae));
+    }
+
+    public function testGetScopedNamedFormula(): void
+    {
+        $formulaName = 'GERMAN_VAT_RATE';
+        $globalFormulaValue = '=19.0%';
+        $localFormulaValue = '=16.0%';
+
+        $spreadSheet = new Spreadsheet();
+        $workSheet = $spreadSheet->getActiveSheet();
+
+        $spreadSheet->addDefinedName(DefinedName::createInstance($formulaName, $workSheet, $globalFormulaValue));
+        $spreadSheet->addDefinedName(DefinedName::createInstance($formulaName, $workSheet, $localFormulaValue, true));
+
+        $localScopedFormula = $spreadSheet->getNamedFormula($formulaName, $workSheet);
+        self::assertSame($localFormulaValue, $localScopedFormula->getValue());
+    }
+
+    public function testGetGlobalNamedFormula(): void
+    {
+        $formulaName = 'GERMAN_VAT_RATE';
+        $globalFormulaValue = '=19.0%';
+        $localFormulaValue = '=16.0%';
+
+        $spreadSheet = new Spreadsheet();
+        $workSheet1 = $spreadSheet->getActiveSheet();
+        $spreadSheet->createSheet(1);
+        $workSheet2 = $spreadSheet->getSheet(1);
+
+        $spreadSheet->addDefinedName(DefinedName::createInstance($formulaName, $workSheet1, $globalFormulaValue));
+        $spreadSheet->addDefinedName(DefinedName::createInstance($formulaName, $workSheet1, $localFormulaValue, true));
+
+        $localScopedFormula = $spreadSheet->getNamedFormula($formulaName, $workSheet2);
+        self::assertSame($globalFormulaValue, $localScopedFormula->getValue());
+    }
+
+    public function providerRangeOrFormula(): array
     {
         return [
             'simple range' => ['A1', false],
             'simple absolute range' => ['$A$1', false],
+            'simple integer value' => ['42', true],
+            'simple float value' => ['12.5', true],
+            'simple string value' => ['"HELLO WORLD"', true],
             'range with a worksheet name' => ['Sheet2!$A$1', false],
             'range with a quoted worksheet name' => ["'Work Sheet #2'!\$A\$1:\$E\$1", false],
             'range with a quoted worksheet name containing quotes' => ["'Mark''s WorkSheet'!\$A\$1:\$E\$1", false],

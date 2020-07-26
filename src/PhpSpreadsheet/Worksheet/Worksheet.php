@@ -13,9 +13,9 @@ use PhpOffice\PhpSpreadsheet\Chart\Chart;
 use PhpOffice\PhpSpreadsheet\Collection\Cells;
 use PhpOffice\PhpSpreadsheet\Collection\CellsFactory;
 use PhpOffice\PhpSpreadsheet\Comment;
+use PhpOffice\PhpSpreadsheet\DefinedName;
 use PhpOffice\PhpSpreadsheet\Exception;
 use PhpOffice\PhpSpreadsheet\IComparable;
-use PhpOffice\PhpSpreadsheet\NamedRange;
 use PhpOffice\PhpSpreadsheet\ReferenceHelper;
 use PhpOffice\PhpSpreadsheet\RichText\RichText;
 use PhpOffice\PhpSpreadsheet\Shared;
@@ -433,9 +433,11 @@ class Worksheet implements IComparable
             throw new Exception('Sheet code name cannot be empty.');
         }
         // Some of the printable ASCII characters are invalid:  * : / \ ? [ ] and  first and last characters cannot be a "'"
-        if ((str_replace(self::$invalidCharacters, '', $pValue) !== $pValue) ||
+        if (
+            (str_replace(self::$invalidCharacters, '', $pValue) !== $pValue) ||
             (Shared\StringHelper::substring($pValue, -1, 1) == '\'') ||
-            (Shared\StringHelper::substring($pValue, 0, 1) == '\'')) {
+            (Shared\StringHelper::substring($pValue, 0, 1) == '\'')
+        ) {
             throw new Exception('Invalid character found in sheet code name');
         }
 
@@ -795,9 +797,9 @@ class Worksheet implements IComparable
     public function rebindParent(Spreadsheet $parent)
     {
         if ($this->parent !== null) {
-            $namedRanges = $this->parent->getDefinedNames();
-            foreach ($namedRanges as $namedRange) {
-                $parent->addNamedRange($namedRange);
+            $definedNames = $this->parent->getDefinedNames();
+            foreach ($definedNames as $definedName) {
+                $parent->addDefinedName($definedName);
             }
 
             $this->parent->removeSheetByIndex(
@@ -1188,9 +1190,11 @@ class Worksheet implements IComparable
         }
 
         // Named range?
-        if ((!preg_match('/^' . Calculation::CALCULATION_REGEXP_CELLREF . '$/i', $pCoordinate, $matches)) &&
-            (preg_match('/^' . Calculation::CALCULATION_REGEXP_DEFINEDNAME . '$/i', $pCoordinate, $matches))) {
-            $namedRange = NamedRange::resolveRange($pCoordinate, $this);
+        if (
+            (!preg_match('/^' . Calculation::CALCULATION_REGEXP_CELLREF . '$/i', $pCoordinate, $matches)) &&
+            (preg_match('/^' . Calculation::CALCULATION_REGEXP_DEFINEDNAME . '$/i', $pCoordinate, $matches))
+        ) {
+            $namedRange = DefinedName::resolveName($pCoordinate, $this);
             if ($namedRange !== null) {
                 $pCoordinate = $namedRange->getValue();
 
@@ -1286,9 +1290,11 @@ class Worksheet implements IComparable
         }
 
         // Named range?
-        if ((!preg_match('/^' . Calculation::CALCULATION_REGEXP_CELLREF . '$/i', $pCoordinate, $matches)) &&
-            (preg_match('/^' . Calculation::CALCULATION_REGEXP_DEFINEDNAME . '$/i', $pCoordinate, $matches))) {
-            $namedRange = NamedRange::resolveRange($pCoordinate, $this);
+        if (
+            (!preg_match('/^' . Calculation::CALCULATION_REGEXP_CELLREF . '$/i', $pCoordinate, $matches)) &&
+            (preg_match('/^' . Calculation::CALCULATION_REGEXP_DEFINEDNAME . '$/i', $pCoordinate, $matches))
+        ) {
+            $namedRange = DefinedName::resolveName($pCoordinate, $this);
             if ($namedRange !== null) {
                 $pCoordinate = $namedRange->getValue();
                 if ($this->getHashCode() != $namedRange->getWorksheet()->getHashCode()) {
@@ -2558,7 +2564,7 @@ class Worksheet implements IComparable
      */
     public function namedRangeToArray($pNamedRange, $nullValue = null, $calculateFormulas = true, $formatData = true, $returnCellRef = false)
     {
-        $namedRange = NamedRange::resolveRange($pNamedRange, $this);
+        $namedRange = DefinedName::resolveName($pNamedRange, $this);
         if ($namedRange !== null) {
             $pWorkSheet = $namedRange->getWorksheet();
             $pCellRange = $namedRange->getValue();
